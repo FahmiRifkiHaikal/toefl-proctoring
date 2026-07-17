@@ -46,18 +46,21 @@
                             <tr class="hover:bg-slate-50/80 transition duration-150">
                                 <td class="p-5 font-bold text-slate-900">{{ $log->user->name }}</td>
                                 <td class="p-5">
-                                    @if($log->violation_type === 'Menoleh')
+                                    @if ($log->violation_type === 'Menoleh')
                                         <span
-                                            class="px-2.5 py-1 bg-amber-50 text-amber-700 font-bold text-xs rounded-lg border border-amber-200/60"><i
-                                                class="fa-solid fa-user-clock mr-1.5"></i>Menoleh</span>
+                                            class="px-2.5 py-1 bg-amber-50 text-amber-700 font-bold text-xs rounded-lg border border-amber-200/60">
+                                            <i class="fa-solid fa-user-clock mr-1.5"></i>Menoleh
+                                        </span>
                                     @elseif($log->violation_type === 'Melirik')
                                         <span
-                                            class="px-2.5 py-1 bg-indigo-50 text-indigo-700 font-bold text-xs rounded-lg border border-indigo-200/60"><i
-                                                class="fa-solid fa-eye mr-1.5"></i>Melirik</span>
+                                            class="px-2.5 py-1 bg-indigo-50 text-indigo-700 font-bold text-xs rounded-lg border border-indigo-200/60">
+                                            <i class="fa-solid fa-eye mr-1.5"></i>Melirik
+                                        </span>
                                     @else
                                         <span
-                                            class="px-2.5 py-1 bg-rose-50 text-rose-700 font-bold text-xs rounded-lg border border-rose-200/60"><i
-                                                class="fa-solid fa-user-slash mr-1.5"></i>Wajah Hilang</span>
+                                            class="px-2.5 py-1 bg-rose-50 text-rose-700 font-bold text-xs rounded-lg border border-rose-200/60">
+                                            <i class="fa-solid fa-user-slash mr-1.5"></i>Wajah Hilang
+                                        </span>
                                     @endif
                                 </td>
                                 <td class="p-5 font-mono text-xs font-semibold text-slate-600">
@@ -66,7 +69,7 @@
 
                                 {{-- LOGIKA BARU: MENAMPILKAN THUMBNAIL FOTO CAPTURE --}}
                                 <td class="p-5">
-                                    @if($log->violation_image && Storage::disk('public')->exists('violations/' . $log->violation_image))
+                                    @if ($log->violation_image && Storage::disk('public')->exists('violations/' . $log->violation_image))
                                         <div class="relative w-12 h-9 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 group shadow-sm cursor-pointer"
                                             onclick="bukaModalBukti('{{ asset('storage/violations/' . $log->violation_image) }}')">
                                             <img src="{{ asset('storage/violations/' . $log->violation_image) }}"
@@ -82,7 +85,8 @@
                                     @endif
                                 </td>
 
-                                <td class="p-5 text-slate-500 text-xs">{{ $log->created_at->format('d M Y - H:i:s') }} WIB</td>
+                                <td class="p-5 text-slate-500 text-xs">{{ $log->created_at->format('d M Y - H:i:s') }} WIB
+                                </td>
                             </tr>
                         @empty
                             <tr>

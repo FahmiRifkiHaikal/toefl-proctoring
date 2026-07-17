@@ -15,6 +15,7 @@ class ViolationLog extends Model
     protected $fillable = [
         'user_id',
         'violation_type',   // 'Menoleh', 'Melirik', 'Wajah Hilang'
+        'exam_session_id',
         'euclidean_score',  // Nilai desimal hasil rumus jarak
         'violation_image',  // Nama file gambar bukti pelanggaran (nullable)
     ];
@@ -22,5 +23,10 @@ class ViolationLog extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function examSession()
+    {
+        return $this->belongsTo(ExamSession::class, 'exam_session_id');
     }
 }

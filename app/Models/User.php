@@ -20,7 +20,8 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
-        'role', // Nilainya: 'admin' atau 'peserta'
+        'role',
+        'face_vector', // Nilainya: 'admin' atau 'peserta'
     ];
 
     protected $hidden = [

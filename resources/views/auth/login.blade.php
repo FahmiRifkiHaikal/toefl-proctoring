@@ -64,7 +64,7 @@
                         <i class="fa-regular fa-envelope"></i>
                     </span>
                     <input type="email" name="email" value="{{ old('email') }}" required
-                        placeholder="Contoh: fahmi@peserta.com"
+                        placeholder="Contoh: user@peserta.com"
                         class="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 text-slate-800 placeholder-slate-400 rounded-[20px] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-900 focus:bg-white transition-all duration-200">
                 </div>
             </div>
@@ -88,7 +88,19 @@
             </button>
         </form>
 
-        <div class="text-center mt-8 pt-6 border-t border-slate-100">
+        <!-- ========================================================================= -->
+        <!-- BUTTON NAVIGASI KE HALAMAN REGISTRASI (TAMBAHAN) -->
+        <!-- ========================================================================= -->
+        <div class="mt-6 text-center text-sm">
+            <p class="text-slate-500 text-xs">Belum memiliki akun peserta / wajah terdaftar?</p>
+            <a href="/register"
+                class="inline-flex items-center gap-1.5 mt-2 text-xs font-bold text-blue-900 hover:text-blue-950 transition-colors border-b border-blue-900/35 hover:border-blue-950 pb-0.5">
+                <i class="fa-solid fa-user-plus text-[10px]"></i> Daftar Akun Baru Disini
+            </a>
+        </div>
+        <!-- ========================================================================= -->
+
+        <div class="text-center mt-6 pt-5 border-t border-slate-100">
             <p class="text-[11px] text-slate-400 font-medium">Sistem Pengawasan Ujian Berbasis AI &copy; 2026</p>
         </div>
     </div>

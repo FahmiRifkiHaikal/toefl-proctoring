@@ -1,78 +1,276 @@
 /**
- * CORE PROCTORING AI - METHOD: SSD MOBILENET V1 & FACIAL LANDMARKS (68 POINTS)
+ * CORE PROCTORING & AUTHENTICATION AI - METHOD: SSD MOBILENET V1, LANDMARKS & RECOGNITION NET
  * PENELITIAN SKRIPSI - ITN MALANG 2026
- * * UPDATE: Menampilkan Matriks Piksel Input & Koordinat Spasial Real-time ke Console
- * * UPDATE BUKTI: Ditambahkan fitur otomatis capture foto bukti kecurangan (Base64)
  */
 
-// Konfigurasi Threshold (Ambang Batas) - Dapat disesuaikan saat bimbingan/pengujian
+// Konfigurasi Threshold (Ambang Batas)
 const THRESHOLD_MENOLEH = 125.0 // Jarak Euclidean deviasi ujung hidung dalam piksel
 const THRESHOLD_MELIRIK = 0.05 // Rasio jarak pupil terhadap sudut mata
-const INTERVAL_DETEKSI = 1000 // Jeda minimal kirim log ke server (1 detik) agar database tidak overload
+const INTERVAL_DETEKSI = 1000 // Jeda minimal kirim log ke server (1 detik)
+
+// Konfigurasi Batas Toleransi Pelanggaran (Tambahan Baru)
+let violationCount = 0
+const MAX_VIOLATIONS = 5
 
 let modelSudahSiap = false
-let koordinatKalibrasi = null // Menyimpan titik jangkar posisi ideal awal wajah
+let koordinatKalibrasi = null
 let waktuPelanggaranTerakhir = 0
+let userFaceMatcher = null // Menyimpan pencocok wajah yang telah dikalibrasi database
 
-// Mengambil elemen video webcam dari halaman exam.blade.php
-const videoElement = document.getElementById('proctor-cam')
+// Mengambil elemen video berdasarkan halaman aktif
+const videoElement = document.getElementById('proctor-cam') // Di halaman Ujian
+const registerVideoElement = document.getElementById('webcam-register') // Di halaman Registrasi
 
-// 1. INISIALISASI: Memuat File Weights Model AI dari Folder Publik
-async function inisialisasiProctoring () {
+// =========================================================================
+// 1. INISIALISASI MODEL UTAMA
+// =========================================================================
+async function inisialisasiSistemAI () {
     try {
         console.log('Memuat model weights face-api.js...')
-        // Mengarah ke folder /public/models sesuai struktur direktori Laravel
-        await faceapi.nets.ssdMobilenetv1.loadFromUri('/models')
-        await faceapi.nets.faceLandmark68Net.loadFromUri('/models')
+        const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights' // Pastikan folder ini ada di public/models
+
+        // Memuat model satu per satu
+        await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL)
+        console.log('Model SsdMobilenetv1 Berhasil Dimuat.')
+
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL)
+        console.log('Model Landmarks Berhasil Dimuat.')
+
+        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+        console.log('Model Rekognisi Berhasil Dimuat.')
 
         modelSudahSiap = true
-        console.log('Model AI MobileNet V1 & Landmarks 68 Berhasil Dimuat.')
+        console.log('Seluruh Model AI Berhasil Dimuat.')
 
-        // Aktifkan loop pengawasan kamera
-        mulaiPengawasanUjian()
+        // Cek halaman aktif untuk menyalakan kamera
+        if (registerVideoElement) {
+            console.log('Menjalankan kamera registrasi...')
+            inisialisasiKameraRegistrasi()
+        } else if (videoElement) {
+            inisialisasiUjianDenganVerifikasi()
+        }
     } catch (error) {
-        console.error('Gagal memuat model proctoring AI:', error)
+        console.error('Gagal memuat model AI:', error)
+        alert(
+            'Eror Muat Model AI: ' +
+                error.message +
+                '\nPeriksa folder public/models Anda!'
+        )
+
+        // Cadangan: Jika model macet tapi kamera ingin dipaksa menyala untuk tes layout
+        if (registerVideoElement) {
+            document.getElementById('status-perekaman').innerText =
+                'Gagal memuat model AI dari server.'
+            document
+                .getElementById('status-perekaman')
+                .classList.replace('text-blue-600', 'text-red-600')
+        }
     }
 }
 
-// 2. LOOP UTAMA: Pengawasan Wajah Secara Real-time Menggunakan RequestAnimationFrame
+// =========================================================================
+// 2. LOGIKA HALAMAN REGISTRASI (FACE ENROLLMENT)
+// =========================================================================
+let mediaStreamRegistrasi = null
+
+async function inisialisasiKameraRegistrasi () {
+    const statusText = document.getElementById('status-perekaman')
+    const captureBtn = document.getElementById('btn-capture-face')
+
+    try {
+        mediaStreamRegistrasi = await navigator.mediaDevices.getUserMedia({
+            video: {}
+        })
+        registerVideoElement.srcObject = mediaStreamRegistrasi
+
+        statusText.innerText = 'Mendeteksi wajah Anda...'
+        statusText.classList.remove('text-blue-600')
+        statusText.classList.add('text-yellow-600')
+
+        // Loop pengecekan kualitas deteksi wajah sebelum tombol capture aktif
+        const intervalCheck = setInterval(async () => {
+            if (!modelSudahSiap || registerVideoElement.paused) return
+
+            const detection = await faceapi
+                .detectSingleFace(
+                    registerVideoElement,
+                    new faceapi.SsdMobilenetv1Options({ minConfidence: 0.6 })
+                )
+                .withFaceLandmarks()
+                .withFaceDescriptor()
+
+            if (detection) {
+                statusText.innerText =
+                    'Wajah terdeteksi dengan baik! Silakan klik tombol di bawah.'
+                statusText.classList.remove('text-yellow-600')
+                statusText.classList.add('text-green-600')
+                captureBtn.disabled = false
+                captureBtn.classList.remove('bg-gray-400', 'cursor-not-allowed')
+                captureBtn.classList.add('bg-blue-600', 'hover:bg-blue-700')
+            } else {
+                statusText.innerText =
+                    'Wajah tidak terdeteksi. Silakan posisikan wajah ke tengah.'
+                statusText.classList.remove('text-green-600')
+                statusText.classList.add('text-yellow-600')
+                captureBtn.disabled = true
+                captureBtn.classList.add('bg-gray-400', 'cursor-not-allowed')
+                captureBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700')
+            }
+        }, 1000)
+
+        // Aksi ketika tombol "Ambil Sidik Wajah" diklik
+        captureBtn.onclick = async () => {
+            clearInterval(intervalCheck)
+            statusText.innerText = 'Mengekstrak ciri wajah...'
+
+            const detection = await faceapi
+                .detectSingleFace(registerVideoElement)
+                .withFaceLandmarks()
+                .withFaceDescriptor()
+
+            if (detection) {
+                const faceDescriptorString = JSON.stringify(
+                    Array.from(detection.descriptor)
+                )
+
+                // Matikan kamera registrasi
+                if (mediaStreamRegistrasi) {
+                    mediaStreamRegistrasi
+                        .getTracks()
+                        .forEach(track => track.stop())
+                }
+
+                statusText.innerText = 'Proses pendaftaran akun...'
+                kirimPendaftaranKeBackend(faceDescriptorString)
+            } else {
+                alert('Gagal merekam wajah, silakan coba lagi.')
+                inisialisasiKameraRegistrasi()
+            }
+        }
+    } catch (err) {
+        console.error('Gagal mengakses webcam:', err)
+        statusText.innerText = 'Akses webcam ditolak atau tidak ditemukan!'
+    }
+}
+
+function kirimPendaftaranKeBackend (faceVectorString) {
+    const csrfToken = document
+        .querySelector('meta[name="csrf-token"]')
+        .getAttribute('content')
+
+    const payload = {
+        name: document.getElementById('reg-name').value,
+        email: document.getElementById('reg-email').value,
+        password: document.getElementById('reg-password').value,
+        face_vector: faceVectorString
+    }
+
+    fetch('/register', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken,
+            Accept: 'application/json'
+        },
+        body: JSON.stringify(payload)
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(
+                    'Registrasi Berhasil! Data akun dan sidik wajah Anda sudah terdaftar.'
+                )
+                window.location.href = '/login' // Redirect ke halaman login
+            } else {
+                alert('Gagal: ' + JSON.stringify(data.errors || data.message))
+                window.location.reload()
+            }
+        })
+        .catch(error => {
+            console.error('Error pendaftaran:', error)
+            alert('Terjadi kesalahan koneksi server.')
+        })
+}
+
+// =========================================================================
+// 3. LOGIKA HALAMAN UJIAN (VERIFIKASI WAJAH & PENGAWASAN REAL-TIME)
+// =========================================================================
+async function inisialisasiUjianDenganVerifikasi () {
+    if (
+        typeof userFaceVectorFromDatabase === 'undefined' ||
+        !userFaceVectorFromDatabase
+    ) {
+        console.error('Data face_vector user tidak ditemukan di halaman ini.')
+        return
+    }
+
+    try {
+        // Rekonstruksi array 128 desimal dari database menjadi objek Float32Array
+        const dbVektorArray = new Float32Array(
+            JSON.parse(userFaceVectorFromDatabase)
+        )
+        const labeledDescriptors = new faceapi.LabeledFaceDescriptors(
+            loggedUsername,
+            [dbVektorArray]
+        )
+
+        // Buat objek pencocok wajah dengan ambang toleransi kemiripan 0.6
+        userFaceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6)
+        console.log('Pencocok wajah ujian berhasil disiapkan.')
+
+        // Jalankan pengawasan utama
+        mulaiPengawasanUjian()
+    } catch (e) {
+        console.error('Gagal melakukan inisialisasi pencocokan wajah ujian:', e)
+    }
+}
+
 function mulaiPengawasanUjian () {
     if (!modelSudahSiap || !videoElement) return
 
-    // Membuat elemen kanvas bayangan (offscreen canvas) untuk mengekstrak piksel gambar grayscale
     const canvasHidden = document.createElement('canvas')
     const ctxHidden = canvasHidden.getContext('2d')
-    // Ukuran sampel matriks diperkecil menjadi 3x3 piksel untuk visualisasi perhitungan Bab 4 Skripsi
     canvasHidden.width = 3
     canvasHidden.height = 3
 
     async function frameLoop () {
-        // Pastikan hardware kamera aktif dan sedang memutar frame gambar
+        // Jika sistem di-terminate atau dihentikan, putuskan perulangan animasi frame
+        if (!modelSudahSiap) return
+
         if (videoElement.paused || videoElement.ended) {
             requestAnimationFrame(frameLoop)
             return
         }
 
-        // Jalankan pipeline deteksi face-api.js
+        // Deteksi wajah tunggal beserta landmarks dan deskriptor live-nya
         const hasilDeteksi = await faceapi
             .detectSingleFace(
                 videoElement,
                 new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 })
             )
             .withFaceLandmarks()
+            .withFaceDescriptor() // <-- Ambil deskriptor wajah live
 
         if (hasilDeteksi) {
-            const landmarks = hasilDeteksi.landmarks
-            const titikKoordinat = landmarks.positions // Array berisi 68 koordinat objek {x, y}
+            // PROSES VERIFIKASI IDENTITAS (RECOGNITION)
+            if (userFaceMatcher) {
+                const matchResult = userFaceMatcher.findBestMatch(
+                    hasilDeteksi.descriptor
+                )
+                if (matchResult.label === 'unknown') {
+                    console.warn(
+                        '[WARNING]: Wajah di depan kamera tidak cocok dengan peserta terdaftar!'
+                    )
+                    catatPelanggaranKeServer('Wajah Berbeda (Calo)', 1.0)
+                }
+            }
 
-            // =========================================================================
-            // Data Input Matriks Piksel GS 3x3
-            // =========================================================================
-            // Menggambar frame webcam ke kanvas mini berukuran 3x3 piksel
+            const landmarks = hasilDeteksi.landmarks
+            const titikKoordinat = landmarks.positions
+
+            // Matriks Piksel GS 3x3
             ctxHidden.drawImage(videoElement, 0, 0, 3, 3)
             const imgData = ctxHidden.getImageData(0, 0, 3, 3).data
-
-            // Konversi nilai warna RGB menjadi 1 Channel Grayscale menggunakan standard luma formula
             let matriksGrayscale = [
                 [0, 0, 0],
                 [0, 0, 0],
@@ -83,106 +281,58 @@ function mulaiPengawasanUjian () {
                 let r = imgData[i * 4]
                 let g = imgData[i * 4 + 1]
                 let b = imgData[i * 4 + 2]
-                // Rumus Grayscale Y = 0.299R + 0.587G + 0.114B
                 let grayValue = Math.round(0.299 * r + 0.587 * g + 0.114 * b)
-
                 let row = Math.floor(i / 3)
                 let col = i % 3
                 matriksGrayscale[row][col] = grayValue
             }
 
-            // Menampilkan matriks piksel ke dalam console log browser secara real-time
             console.log(
                 'Matriks Piksel Wajah Input (X) [3x3 Grayscale]:',
                 JSON.stringify(matriksGrayscale)
             )
-            // =========================================================================
 
-            // Jika belum ada data kalibrasi, kunci frame pertama sebagai posisi ideal awal
             if (!koordinatKalibrasi) {
                 koordinatKalibrasi = titikKoordinat
                 console.log(
                     'Kalibrasi Berhasil! Posisi ideal awal wajah telah terkunci.'
                 )
             } else {
-                // Analisis pergerakan wajah berdasarkan tolok ukur kalibrasi
                 analisisGerakanWajah(titikKoordinat)
             }
         } else {
-            // Wajah tidak terdeteksi oleh SSD MobileNet V1 (Peserta meninggalkan meja ujian)
             catatPelanggaranKeServer('Wajah Hilang', 0)
         }
 
-        // Lanjutkan rekursif ke frame webcam berikutnya
         requestAnimationFrame(frameLoop)
     }
 
     frameLoop()
 }
 
-// 3. LOGIKA ANALISIS: Komputasi Geometri Wajah dengan Rumus Jarak Euclidean
+// 4. LOGIKA ANALISIS: Komputasi Geometri Wajah dengan Rumus Jarak Euclidean
 function analisisGerakanWajah (titikBaru) {
-    /**
-     * DETEKSI MENOLEH (Menggunakan Koordinat Ujung Hidung - Titik Landmark 34 / Indeks 33)
-     */
     const hidungAwal = koordinatKalibrasi[33]
     const hidungBaru = titikBaru[33]
 
-    // =========================================================================
-    // Koordinat Spasial
-    // =========================================================================
-    console.log(
-        `Koordinat Hidung Awal (Kalibrasi): X=${hidungAwal.x.toFixed(
-            2
-        )}, Y=${hidungAwal.y.toFixed(2)}`
-    )
-    console.log(
-        `Koordinat Hidung Real-time Berjalan: X=${hidungBaru.x.toFixed(
-            2
-        )}, Y=${hidungBaru.y.toFixed(2)}`
-    )
-    // =========================================================================
-
-    // Implementasi Rumus Jarak Euclidean
     const jarakEuclideanHidung = Math.sqrt(
         Math.pow(hidungBaru.x - hidungAwal.x, 2) +
             Math.pow(hidungBaru.y - hidungAwal.y, 2)
     )
 
-    console.log(
-        `Jarak Spasial Deviasi Pergeseran (Euclidean): ${jarakEuclideanHidung.toFixed(
-            2
-        )} piksel`
-    )
-
     if (jarakEuclideanHidung > THRESHOLD_MENOLEH) {
         catatPelanggaranKeServer('Menoleh', jarakEuclideanHidung)
-        return // Prioritaskan deteksi menoleh sebelum memeriksa lirikan mata
+        return
     }
 
-    /**
-     * DETEKSI MELIRIK (Menggunakan Rasio Geometri Mata Kiri)
-     * Titik Landmark Mata Kiri berada pada rentang indeks 36 sampai 41
-     */
-    const mataKiriKiri = titikBaru[36] // Sudut luar mata kiri
-    const mataKiriKanan = titikBaru[39] // Sudut dalam mata kiri
-    const pupilKiri = titikBaru[37] // Estimasi titik tengah pupil mata kiri
+    const mataKiriKiri = titikBaru[36]
+    const mataKiriKanan = titikBaru[39]
+    const pupilKiri = titikBaru[37]
 
-    // Hitung perbandingan rasio jarak horizontal pupil terhadap lebar sudut mata
     const jarakKiriKeluar = Math.abs(pupilKiri.x - mataKiriKiri.x)
     const lebarMataKiri = Math.abs(mataKiriKanan.x - mataKiriKiri.x)
     const rasioMelirik = jarakKiriKeluar / lebarMataKiri
 
-    console.log(
-        `Koordinat Mata Kiri - Sudut Luar: ${mataKiriKiri.x.toFixed(
-            2
-        )}, Pupil: ${pupilKiri.x.toFixed(
-            2
-        )}, Sudut Dalam: ${mataKiriKanan.x.toFixed(2)}`
-    )
-    console.log(`Rasio Lirikan Mata Kiri: ${rasioMelirik.toFixed(4)}`)
-
-    // Jika rasio bergeser ekstrem mendekati sudut mata (Melirik ke kanan/kiri tanpa menolehkan kepala)
     if (
         rasioMelirik < THRESHOLD_MELIRIK ||
         rasioMelirik > 1 - THRESHOLD_MELIRIK
@@ -191,35 +341,33 @@ function analisisGerakanWajah (titikBaru) {
     }
 }
 
-// 4. AJAX FETCH API: Mengirimkan Payload Data Pelanggaran & Bukti Foto ke Backend Laravel
+// 5. AJAX FETCH API: Mengirimkan Payload Data Pelanggaran & Bukti Foto ke Backend Laravel
 function catatPelanggaranKeServer (jenisPelanggaran, skorJarak) {
     const waktuSekarang = Date.now()
 
-    // Throttle System: Mencegah banjir/spam data insert ke MySQL dalam waktu milidetik
     if (waktuSekarang - waktuPelanggaranTerakhir < INTERVAL_DETEKSI) {
         return
     }
 
     waktuPelanggaranTerakhir = waktuSekarang
+
+    // Increment jumlah total pelanggaran berjalan
+    violationCount++
+
     console.warn(
-        `[TERDETEKSI KECURANGAN]: ${jenisPelanggaran} (Skor Jarak: ${skorJarak.toFixed(
-            2
-        )})`
+        `[TERDETEKSI KECURANGAN]: ${jenisPelanggaran} (${violationCount}/${MAX_VIOLATIONS})`
     )
 
-    // =========================================================================
-    // PROSES CAPTURE FOTO OTOMATIS SEBAGAI BUKTI
-    // =========================================================================
+    // Tampilkan notifikasi peringatan di layar web peserta
+    tampilkanNotifikasiPeserta(jenisPelanggaran)
+
     let buktiFotoBase64 = null
     if (videoElement && !videoElement.paused && !videoElement.ended) {
         try {
-            // Membuat kanvas offscreen sementara berukuran sesuai resolusi webcam
             const canvasCapture = document.createElement('canvas')
             canvasCapture.width = videoElement.videoWidth || 640
             canvasCapture.height = videoElement.videoHeight || 480
-
             const ctxCapture = canvasCapture.getContext('2d')
-            // Ambil frame video berjalan detik ini ke kanvas
             ctxCapture.drawImage(
                 videoElement,
                 0,
@@ -227,8 +375,6 @@ function catatPelanggaranKeServer (jenisPelanggaran, skorJarak) {
                 canvasCapture.width,
                 canvasCapture.height
             )
-
-            // Konversi kanvas gambar menjadi string format Base64 JPEG dengan kompresi kualitas 0.7
             buktiFotoBase64 = canvasCapture.toDataURL('image/jpeg', 0.7)
         } catch (e) {
             console.error(
@@ -237,14 +383,12 @@ function catatPelanggaranKeServer (jenisPelanggaran, skorJarak) {
             )
         }
     }
-    // =========================================================================
 
-    // Mengambil token keamanan CSRF dari meta tag layout/peserta.blade.php
     const csrfToken = document
         .querySelector('meta[name="csrf-token"]')
         .getAttribute('content')
 
-    // Kirim request POST asinkron ke endpoint Laravel dengan menyertakan bukti foto
+    // Kirim log pelanggaran ke Laravel Backend
     fetch('/exam/violation-log', {
         method: 'POST',
         headers: {
@@ -255,33 +399,171 @@ function catatPelanggaranKeServer (jenisPelanggaran, skorJarak) {
         body: JSON.stringify({
             violation_type: jenisPelanggaran,
             euclidean_score: skorJarak,
-            violation_image: buktiFotoBase64 // Menyertakan payload data gambar string Base64
+            violation_image: buktiFotoBase64,
+            current_violation_count: violationCount
         })
     })
         .then(response => response.json())
         .then(data => {
             console.log('Respon Database Laravel:', data.message)
+
+            // Cek jika counter sudah menyentuh batas maksimal 5 kali
+            if (violationCount >= MAX_VIOLATIONS) {
+                terminateExam()
+            }
         })
         .catch(error => {
             console.error('Gagal mengirimkan log kecurangan ke server:', error)
+            if (violationCount >= MAX_VIOLATIONS) {
+                terminateExam()
+            }
         })
 }
 
-function hentikanProctoring () {
-    // 1. Hentikan loop AI
-    modelSudahSiap = false
+// 6. LOGIKA PENGHENTIAN PAKSA UJIAN (TERMINATED / TERMINASI AI)
+function terminateExam () {
+    hentikanProctoring()
 
-    // 2. Matikan hardware webcam
+    document.body.innerHTML = `
+        <div class="fixed inset-0 bg-slate-950 flex items-center justify-center text-white text-center p-6 font-sans z-[99999]">
+            <div class="max-w-md space-y-5 animate-fadeIn">
+                <div class="inline-flex items-center justify-center w-20 h-20 bg-red-500/10 rounded-[26px] text-red-500 text-5xl border border-red-500/20 shadow-xl shadow-red-500/5">
+                    <i class="fa-solid fa-circle-xmark animate-pulse"></i>
+                </div>
+                <div class="space-y-2">
+                    <h1 class="text-3xl font-extrabold tracking-tight text-slate-100">UJIAN DIHENTIKAN!</h1>
+                    <p class="text-xs font-bold text-red-500 tracking-widest uppercase">Batas Toleransi Kecurangan Terlampaui</p>
+                </div>
+                <p class="text-sm text-slate-400 leading-relaxed">
+                    Sistem AI Proctoring mendeteksi Anda telah melakukan tindakan di luar aturan sebanyak <span class="text-red-400 font-bold">${MAX_VIOLATIONS} kali</span>. Sesi ujian Anda otomatis dibekukan.
+                </p>
+                <div class="pt-2">
+                    <p class="text-xs text-slate-500 flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-spinner animate-spin"></i> Mengalihkan ke halaman riwayat dan pengulangan...
+                    </p>
+                </div>
+            </div>
+        </div>
+    `
+
+    // Redirect dialihkan ke halaman summary peserta (sesuaikan dengan route kamu)
+    setTimeout(() => {
+        window.location.href = '/peserta/exam-summary'
+    }, 3500)
+}
+
+// =========================================================================
+// INISIALISASI BERDASARKAN STRUKTUR HALAMAN BLADE
+// =========================================================================
+window.addEventListener('DOMContentLoaded', () => {
+    // 1. Cek apakah berada di auth/registrasi.blade.php
+    // Pastikan tag <form> atau div utama di registrasi.blade.php memiliki id="form-registrasi"
+    const onRegisterPage = document.getElementById('form-registrasi') !== null
+
+    // 2. Cek apakah berada di peserta/exam.blade.php
+    // Cukup cek apakah elemen <video id="proctor-cam"> ada di halaman tersebut
+    const onExamPage = document.getElementById('proctor-cam') !== null
+
+    if (onRegisterPage) {
+        console.log('Sistem mendeteksi halaman: Registrasi Peserta')
+        inisialisasiSistemAI()
+    } else if (onExamPage) {
+        console.log(
+            'Sistem mendeteksi halaman: Ujian TOEFL Peserta (Jeda 2 detik untuk stabilisasi)'
+        )
+        setTimeout(inisialisasiSistemAI, 2000)
+    }
+})
+
+function hentikanProctoring () {
+    modelSudahSiap = false
     if (videoElement && videoElement.srcObject) {
         const stream = videoElement.srcObject
         const tracks = stream.getTracks()
-        tracks.forEach(track => track.stop()) // Kamera mati
+        tracks.forEach(track => track.stop())
         console.log('Kamera dan pengawasan AI dihentikan.')
     }
 }
 
-// Menjalankan sistem pendeteksi AI sesaat setelah seluruh elemen DOM selesai dimuat
+// Fungsi Menampilkan Notifikasi Peringatan di Sisi Peserta
+function tampilkanNotifikasiPeserta (jenisPelanggaran) {
+    const warningBox = document.getElementById('proctor-warning-box')
+    const warningMessage = document.getElementById('warning-message')
+
+    if (!warningBox) return
+
+    let pesan = ''
+    switch (jenisPelanggaran) {
+        case 'Menoleh':
+            pesan = `Peringatan (${violationCount}/${MAX_VIOLATIONS})! Kepala Anda menoleh. Harap tetap fokus ke layar.`
+            break
+        case 'Melirik':
+            pesan = `Peringatan (${violationCount}/${MAX_VIOLATIONS})! Mata Anda melirik keluar. Fokus pada soal ujian.`
+            break
+        case 'Wajah Hilang':
+            pesan = `Peringatan (${violationCount}/${MAX_VIOLATIONS})! Wajah tidak terdeteksi. Posisikan diri di depan webcam.`
+            break
+        case 'Wajah Berbeda (Calo)':
+            pesan = `Peringatan Keras (${violationCount}/${MAX_VIOLATIONS})! Identitas wajah tidak sesuai dengan peserta ujian!`
+            break
+        default:
+            pesan = `Aktivitas mencurigakan terdeteksi (${violationCount}/${MAX_VIOLATIONS}).`
+    }
+
+    warningMessage.innerText = pesan
+
+    // Putar suara peringatan (Beep Audio API bawaan Browser)
+    putarSuaraPeringatan()
+
+    // Jalankan efek animasi slide-in Tailwind
+    warningBox.classList.remove('hidden', 'translate-x-full')
+    warningBox.classList.add('translate-x-0')
+
+    // Sembunyikan otomatis notifikasi setelah 4 detik jika belum menyentuh batas limit
+    if (violationCount < MAX_VIOLATIONS) {
+        setTimeout(() => {
+            warningBox.classList.remove('translate-x-0')
+            warningBox.classList.add('translate-x-full')
+            setTimeout(() => {
+                warningBox.classList.add('hidden')
+            }, 300)
+        }, 4000)
+    }
+}
+
+// Fungsi menghasilkan suara Beep instan tanpa membutuhkan file .mp3 tambahan
+function putarSuaraPeringatan () {
+    try {
+        const audioCtx = new (window.AudioContext ||
+            window.webkitAudioContext)()
+        const oscillator = audioCtx.createOscillator()
+        const gainNode = audioCtx.createGain()
+
+        oscillator.connect(gainNode)
+        gainNode.connect(audioCtx.destination)
+
+        oscillator.type = 'sine'
+        oscillator.frequency.setValueAtTime(850, audioCtx.currentTime) // Frekuensi suara sedikit dinaikkan agar terdengar tegas
+        gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime)
+
+        oscillator.start()
+        oscillator.stop(audioCtx.currentTime + 0.35)
+    } catch (e) {
+        console.warn(
+            'Browser memblokir pemutaran suara otomatis sebelum interaksi user:',
+            e
+        )
+    }
+}
+
+// Menjalankan inisialisasi ketika DOM siap
 window.addEventListener('DOMContentLoaded', () => {
-    // Beri jeda 2 detik agar hardware kamera internal laptop stabil terlebih dahulu
-    setTimeout(inisialisasiProctoring, 2000)
+    const onRegisterPage = document.getElementById('form-registrasi') !== null
+    const onExamPage = document.getElementById('proctor-cam') !== null
+
+    if (onRegisterPage) {
+        inisialisasiSistemAI()
+    } else if (onExamPage) {
+        setTimeout(inisialisasiSistemAI, 2000)
+    }
 })

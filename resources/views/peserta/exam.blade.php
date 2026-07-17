@@ -63,6 +63,25 @@
             </div>
         </div>
 
+        <!-- Elemen Notifikasi Peringatan Kecurangan (Melayang) -->
+        <div id="proctor-warning-box"
+            class="fixed top-4 right-4 z-50 transform translate-x-full transition-transform duration-300 ease-in-out hidden max-w-sm bg-red-100 border-l-4 border-red-500 rounded-lg p-4 shadow-lg">
+            <div class="flex items-start">
+                <div class="flex-shrink-0">
+                    <!-- Icon Peringatan (Exclamation) -->
+                    <svg class="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-bold text-red-800" id="warning-title">Peringatan Kecurangan!</h3>
+                    <p class="text-xs text-red-700 mt-1" id="warning-message">Wajah Anda terdeteksi menoleh keluar area
+                        ujian.</p>
+                </div>
+            </div>
+        </div>
+
         <div class="space-y-6">
             <div class="bg-white p-6 rounded-[24px] border border-slate-200/80 shadow-md text-center">
                 <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Sisa Waktu Pengerjaan</p>
@@ -128,5 +147,10 @@
                 window.location.href = "{{ route('exam.calibration') }}";
             }
         });
+    </script>
+    <script>
+        // Ambil data user aktif dari sistem autentikasi Laravel
+        const userFaceVectorFromDatabase = @json(auth()->user()->face_vector);
+        const loggedUsername = @json(auth()->user()->name);
     </script>
 @endsection

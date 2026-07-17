@@ -4,6 +4,9 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use App\Models\User;
+use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
@@ -11,6 +14,11 @@ class AuthController extends Controller
     public function showLogin()
     {
         return view('auth.login');
+    }
+
+    public function showRegistrationForm()
+    {
+        return view('auth.registrasi');
     }
 
     // Memproses data form login (Logika Utama)
@@ -41,6 +49,44 @@ class AuthController extends Controller
         return back()->withErrors([
             'email' => 'Email atau password yang Anda masukkan salah.',
         ])->onlyInput('email');
+    }
+
+    // Memproses Registrasi Akun & Simpan Vektor Wajah
+    public function register(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'required|string|email|max:255|unique:users',
+            'password' => 'required|string|min:8',
+            'face_vector' => 'required|string', // String JSON hasil JSON.stringify() dari JavaScript
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $user = User::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+                'role' => 'peserta', // Default role untuk pendaftar ujian
+                'face_vector' => $request->face_vector, // Menyimpan array 128 dimensi
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Registrasi akun dan perekaman wajah berhasil disimpan!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menyimpan data pendaftaran: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     // Memproses proses keluar sistem (Logout)

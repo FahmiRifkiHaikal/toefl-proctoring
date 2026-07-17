@@ -11,6 +11,7 @@
 
 <body class="bg-slate-50 text-slate-800 font-sans antialiased selection:bg-indigo-500 selection:text-white">
 
+    <!-- NAVIGASI UTAMA -->
     <nav class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
@@ -25,16 +26,22 @@
                     </span>
                 </div>
 
-                <div>
+                <!-- Tombol Aksi Kanan (Login & Register) -->
+                <div class="flex items-center gap-3">
                     <a href="/login"
-                        class="inline-flex items-center justify-center px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 rounded-xl shadow-lg shadow-indigo-100 transition-all duration-200 transform hover:-translate-y-0.5">
+                        class="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-50 active:bg-slate-100 rounded-xl transition-all duration-200">
                         <i class="fa-solid fa-right-to-bracket mr-2"></i> Login
+                    </a>
+                    <a href="/register"
+                        class="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 rounded-xl shadow-md shadow-indigo-100 transition-all duration-200 transform hover:-translate-y-0.5">
+                        <i class="fa-solid fa-user-plus mr-2"></i> Register
                     </a>
                 </div>
             </div>
         </div>
     </nav>
 
+    <!-- HEADER / HERO SECTION -->
     <header class="relative overflow-hidden pt-16 pb-20 lg:pt-24 lg:pb-28">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div class="lg:grid lg:grid-cols-12 lg:gap-8 items-center">
@@ -54,10 +61,16 @@
                         Platform TOEFL Prediction Test online yang aman, akurat, dan terintegrasi dengan teknologi
                         proctoring pintar berbasis *Convolutional Neural Network* untuk menjaga integritas ujian Anda.
                     </p>
-                    <div class="mt-8 sm:max-w-lg sm:mx-auto sm:text-center lg:text-left lg:mx-0">
+
+                    <!-- Dua Tombol Pilihan di Hero Section -->
+                    <div class="mt-8 flex flex-col sm:flex-row sm:justify-center lg:justify-start gap-4">
                         <a href="/login"
                             class="inline-flex items-center justify-center px-8 py-4 text-base font-bold text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 rounded-2xl shadow-xl shadow-indigo-200 transition-all duration-200 transform hover:-translate-y-1">
                             Mulai Tes Sekarang <i class="fa-solid fa-arrow-right ml-2 text-sm"></i>
+                        </a>
+                        <a href="/register"
+                            class="inline-flex items-center justify-center px-8 py-4 text-base font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-2xl shadow-sm transition-all duration-200 transform hover:-translate-y-1">
+                            <i class="fa-solid fa-user-gear mr-2 text-sm text-slate-500"></i> Registrasi Akun Wajah
                         </a>
                     </div>
                 </div>
